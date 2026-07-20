@@ -14,14 +14,7 @@ const PAGE_MARKER = '\n---PAGE---\n'
 
 export async function extractPdfText(file: File) {
   const data = await file.arrayBuffer()
-  let pdf: pdfjsLib.PDFDocumentProxy
-
-  try {
-    pdf = await pdfjsLib.getDocument({ data }).promise
-  } catch (error) {
-    console.warn('PDF.js worker 로딩에 실패해 worker 없이 PDF를 읽습니다.', error)
-    pdf = await pdfjsLib.getDocument({ data, disableWorker: true }).promise
-  }
+  const pdf = await pdfjsLib.getDocument({ data }).promise
 
   const pages: string[] = []
 
