@@ -67,6 +67,24 @@ export default function App() {
     setStatus(next.length ? 'idle' : 'error')
   }
 
+  const handleMoveFile = (fromIndex: number, toIndex: number) => {
+    if (isProcessing) return
+    setFiles((current) => {
+      if (fromIndex < 0 || fromIndex >= current.length || toIndex < 0 || toIndex >= current.length) return current
+      const next = [...current]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+    setSummaries([])
+    setSelections([])
+    setDebugItems([])
+    setShareStatus(null)
+    setIsEditingAll(false)
+    setDraftSummaries([])
+    setStatus('idle')
+  }
+
   const handleCreateSummaries = async () => {
     if (!files.length) return
     setError(null)
@@ -308,7 +326,7 @@ export default function App() {
         <section className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
           <aside className="space-y-3">
             <FileDropzone onFilesSelected={handleFilesSelected} disabled={isProcessing} />
-            <SelectedFileList files={files} disabled={!files.length || isProcessing} isProcessing={isProcessing} onCreateSummaries={handleCreateSummaries} />
+            <SelectedFileList files={files} disabled={!files.length || isProcessing} isProcessing={isProcessing} onCreateSummaries={handleCreateSummaries} onMoveFile={handleMoveFile} />
             {error && <div className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
 
             {debugItems.length > 0 && (
