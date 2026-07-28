@@ -10,14 +10,14 @@ type SummaryCardProps = {
 
 export function SummaryCard({ summary, isEditing, drafts, onDraftChange }: SummaryCardProps) {
   const displayName = getDisplayFileName(summary.fileName)
-  const compactTitle = displayName.length > 44
+  const compactTitle = displayName.length > 72
 
   return (
     <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
       <div className="mb-2 min-w-0">
         <h3
           title={displayName}
-          className={`block w-full truncate whitespace-nowrap font-bold leading-5 text-slate-900 ${compactTitle ? 'text-[11px]' : 'text-[15px]'}`}
+          className={`block w-full truncate whitespace-nowrap font-sans font-bold tracking-[-0.01em] text-slate-900 ${compactTitle ? 'text-[13px] leading-5' : 'text-[15px] leading-5'}`}
         >
           {displayName}
         </h3>
