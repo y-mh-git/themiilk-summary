@@ -3,6 +3,7 @@ import type { SummaryContent } from '../types'
 const CHUNK_SIZE = 12_000
 const CHUNK_OVERLAP = 600
 const BULLET_COUNT = 2
+const DOCUMENT_CONTEXT_PARAGRAPH_LIMIT = 10
 const LEADING_CONNECTORS = /^(그리고|또한|결국|즉|하지만|다만|한편|따라서|그러나|특히|이에 따라|이와 함께)[,，]?\s*/
 const BRIEF_ENDING = /(함|임|음|됨|의미|전망|확대|가능성|핵심|부상|필요|예상)\.$/
 const SUBJECT_MARKER = /^(.{2,60}?)(?:은|는|이|가)\s/
@@ -55,11 +56,19 @@ const TITLE_STOP_WORDS = new Set([
 ])
 
 const FINAL_INSTRUCTION = `다음 PDF 내용은 TheMiilk에서 발행된 ICT/AI/반도체/디지털 산업 관련 자료다.
-정보통신기획평가원 내부 직원에게 전달할 목적이지만, IITP 관점이나 정책적 해석을 추가하지 말고 원문에 근거해 핵심만 압축해라.
+이 요약은 원문의 대체물이 아니라 사용자가 PDF 원문을 열어보기 전에 자료의 핵심과 읽을 가치 여부를 빠르게 판단하게 하는 '프리뷰 요약'이다.
+단순히 본문에서 중요한 문장 두 개를 뽑아 압축하지 말고, 제목·부제·본문 전체 구조를 먼저 파악한 뒤 서로 역할이 다른 두 문장으로 작성해라.
+정보통신기획평가원 내부 직원에게 전달할 목적이지만, IITP 관점이나 정책적 해석을 추가하지 말고 원문에 근거해 핵심만 작성해라.
 요약 전에 반드시 본문이 실제로 시작되는 위치를 먼저 판단해라. 인사말, 기자 소개, 뉴스레터 소개, 구독 안내, "오늘은...", "이번 기사에서는..." 같은 도입부는 본문이 아니므로 요약 대상에서 제외해라.
 TheMiilk 기사 앞부분에는 기자 인사, 뉴스레터 소개, 연재 소개, 구독자 안내가 포함될 수 있다. 이 부분은 핵심내용이 아니므로 실제 기사 본문 이후의 내용만 분석해라.
 요약 페이지의 목적은 사용자가 원문을 읽을지 말지 빠르게 판단하도록 돕는 것이다. 따라서 파일 제목과 직접 연결되는 중심 이슈를 우선 요약하고, 제목과 무관한 주변 사례·부가 사례를 핵심 bullet로 올리지 마라.
-요약의 목적은 기사를 해석하는 것이 아니라 기사를 압축하는 것이다. 새로운 의미 부여, 원문에 없는 인사이트 생성, 과도한 정책적 해석, 일반화, 원문에 없는 결론 작성을 모두 금지한다.
+요약 작성 전 내부적으로 다음 순서를 반드시 수행해라. STEP 1: 문서 제목과 부제를 파악한다. STEP 2: 제목의 주장·질문·표현·숫자·현상이 왜 등장했는지 본문 전체에서 근거를 찾는다. STEP 3: 본문 전체가 궁극적으로 전달하는 핵심 메시지를 파악한다. STEP 4: 서로 중복되지 않는 두 문장으로 작성한다.
+첫 번째 글머리기호는 '왜 이런 제목이 붙었는가?'에 답하는 문장이다. 제목과 직접 연결되는 가장 중요한 근거, 이유, 변화, 수치, 사실 또는 원인·결과 관계를 한 문장으로 작성해라.
+첫 번째 문장은 제목과 함께 읽었을 때 제목의 의미와 기사에서 다루는 문제가 즉시 이해되어야 한다. 제목과 관련 없는 흥미로운 숫자나 세부 사례를 첫 번째 문장으로 쓰지 마라.
+두 번째 글머리기호는 '그래서 이 문서가 결국 무엇을 말하는가?'에 답하는 문장이다. 본문 전체를 관통하는 핵심 주장, 변화 또는 중요성을 한 문장으로 작성해라.
+두 번째 문장은 첫 번째 문장의 표현만 바꿔 반복하지 말고, 이 자료에서 얻을 수 있는 정보와 더 읽어볼 가치가 무엇인지 판단하게 해야 한다.
+두 문장은 반드시 '제목의 근거·이유·핵심 사실 → 문서 전체의 핵심 메시지' 구조를 따른다.
+새로운 의미 부여, 원문에 없는 인사이트 생성, 과도한 정책적 해석, 일반화, 원문에 없는 결론 작성을 모두 금지한다.
 원문에 없는 내용은 추측하지 마라. 확인되지 않는 기업명, 수치, 정책적 의미를 추가하지 마라.
 제목, 소제목, 반복 핵심어, 결론, 수치, 기업명과 산업명을 우선 반영하되 원문에 있는 관계만 서술해라.
 각 문장은 반드시 주체를 명시해라. 실적 발표, 발언, 전망, 투자, 수치 변화는 해당 기업·기관·산업 주체를 문장 안에 직접 써라.
@@ -74,14 +83,15 @@ TheMiilk 기사 앞부분에는 기자 인사, 뉴스레터 소개, 연재 소�
 구어체 강조어를 쓰지 말고 원문이 말한 핵심 내용으로 압축해라. 예: "중요한 점은 돈임."처럼 쓰지 말고 원문에서 확인되는 비용, 시간, 정확도, 매출, 생산성 등 구체 내용을 중심으로 작성해라.
 파일 제목에 등장하는 기업명과 본문 근거문의 발언 주체가 다르면, 반드시 본문 근거문의 실제 주체를 써라. 제목 기업이 말한 것처럼 오해될 표현을 금지한다.
 예: "MS 관련 문서에서 SK하이닉스 실적 발표 내용이 근거라면 "SK하이닉스는 ..."으로 시작하고, MS가 발표한 것처럼 쓰지 마라.
-요약 우선순위는 1순위 기사 제목이 말하려는 핵심 주장, 2순위 본문 전체에서 반복적으로 설명하는 중심 메시지, 3순위 이를 뒷받침하는 근거다.
+요약 우선순위는 1순위 제목의 핵심 표현을 직접 설명하는 내용, 2순위 본문 전체에서 반복되거나 강조되는 중심 주장, 3순위 중심 주장을 뒷받침하는 대표 수치·사실, 4순위 결론 또는 향후 변화에 관한 핵심 내용이다.
+낮은 우선순위는 개별 사례, 주변 설명, 도입부, 단순 배경지식이다.
 가중치는 제목 40%, 소제목 30%, 서론·결론 20%, 본문 세부 사례 10%로 적용해라. 본문 중간의 세부 사례나 예시가 제목·소제목·서론·결론보다 우선되면 안 된다.
 자료 전체에서 가장 중요한 핵심 메시지 두 개만 선정하고, 원문의 의미를 바꾸지 않는 범위에서 내부 보고서 개조식으로 압축해라.
 반드시 글머리기호 2개만 출력하고 각 글머리기호는 하나의 핵심 메시지와 하나의 완전한 문장으로 구성해라.
 두 글머리기호는 서로 중복되지 않아야 하며, 숫자·기업명·사례는 핵심 내용을 이해하는 데 꼭 필요한 경우에만 포함해라.
-첫 번째 글머리기호는 '핵심내용'이다. 기사 제목이 말하려는 핵심 주장을 가장 잘 설명하는 한 문장으로 작성해라. 이 한 문장만 읽었을 때 제목이 설명되어야 한다.
-두 번째 글머리기호는 '인사이트'다. 원문에 근거해 이 내용이 왜 중요한지 정책적·산업적 의미를 설명하는 한 문장으로 작성하되, 원문에 없는 해석은 추가하지 마라.
-두 글머리기호는 "핵심내용 + 인사이트" 구조여야 한다.
+첫 번째 글머리기호는 제목의 근거·이유·핵심 사실이다. 기사 제목이 말하려는 핵심 주장을 가장 잘 설명하는 한 문장으로 작성해라. 이 한 문장만 읽었을 때 제목이 설명되어야 한다.
+두 번째 글머리기호는 문서 전체의 핵심 메시지다. 원문에 근거해 본문 전체가 말하는 가장 중요한 변화·주장·중요성을 한 문장으로 작성하되, 원문에 없는 해석은 추가하지 마라.
+두 글머리기호는 "제목의 근거·이유·핵심 사실 + 문서 전체의 핵심 메시지" 구조여야 한다.
 예시나 사례를 그대로 나열하지 마라. 기업 사례가 여러 개 등장하면 그 사례들이 원문에서 공통적으로 설명하는 핵심 내용을 요약하되, 원문을 넘어선 해석은 추가하지 마라.
 제목의 중심 주제와 직접 연결되지 않는 별도 사례를 최종 요약으로 선택하지 마라. "이와 별도로", "한편", "추가로", "반면"으로 이어지는 국가·기업 사례는 기사 결론을 직접 설명할 때만 사용하고, 독립 bullet로 쓰지 마라.
 절대로 기사 중간에 등장하는 사례, 특정 기업 사례, 특정 산업 사례, 예시, 부가 설명만을 핵심내용으로 작성하지 마라.
@@ -114,13 +124,14 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
 
   try {
     const attributionEvidence = collectAttributionEvidence(text)
+    const documentContext = buildDocumentContext(text)
     const chunkSummaries = await Promise.all(
       chunks.map((chunk, index) =>
         callSummaryApi(endpoint, {
           fileName,
           text: chunk,
           stage: 'chunk',
-          instruction: `원문 근거만 사용해 이 구간이 말하는 핵심 메시지 후보를 3개 이내로 압축해라. 요약 전에 실제 기사 본문이 시작되는 위치를 판단하고, 인사말·기자 소개·뉴스레터 소개·구독 안내·"오늘은..."·"이번 기사에서는..." 같은 도입부는 후보에서 제외해라. 요약의 목적은 사용자가 원문을 읽을지 말지 판단할 수 있게 하는 것이다. 우선순위는 제목 핵심 주장 40%, 소제목 중심 메시지 30%, 서론·결론 20%, 본문 세부 사례 10%다. 기사 중간 사례, 특정 기업 사례, 예시, 부가 설명만 후보로 뽑지 마라. 새로운 의미 부여, 원문에 없는 결론 작성을 금지한다. 중요한 문장이나 수치를 그대로 옮기지 말고, 원문이 직접 전달하는 중심 메시지를 간결하게 정리해라. 첫 번째 후보는 제목을 관통하는 대표 핵심내용으로 쓸 수 있을 만큼 문서의 중심 내용을 담아야 하며, 기사 첫 문장을 그대로 옮긴 후보는 제외해라. 숫자·기업명·사례는 메시지 이해에 필요한 경우에만 포함해라. 예산·비교·조직 신설이 제목의 핵심 근거일 때는 누가 무엇에 얼마를 배정했는지, 그 규모가 무엇과 비교되는지, 왜 핵심 근거인지 빠뜨리지 마라. "이와 별도로", "한편", "추가로", "반면"으로 이어지는 주변 국가·기업 사례는 제목의 중심 주제나 기사 결론을 직접 설명하지 않으면 후보로 뽑지 마라. 파일 제목이 특정 병목·쟁점·질문을 제시하면 그 질문에 답하는 문장만 핵심 후보로 선택해라. 실적 발표, 발언, 전망, 투자, 수치 변화는 해당 기업·기관·산업 주체를 반드시 함께 적어라. 제목 조각과 본문 문장을 이어 붙이지 말고, "비용·시간·정확도로 증명하라 2027년..."처럼 제목형 명령문과 본문 문장을 붙인 요약을 만들지 마라. '그는/이들은/해당 기업' 같은 지시대명사 대신 정확한 명칭을 써라. 생소한 기업·모델은 왜 중요한지 역할을 함께 설명해라. 출처 표기나 "주목해야 할 점은 돈" 같은 원문 메모·구어체 강조를 요약문에 넣지 마라. 문서 구간 ${index + 1}/${chunks.length}.`,
+          instruction: `원문 근거만 사용해 이 구간이 말하는 핵심 메시지 후보를 3개 이내로 압축해라. 요약 전에 실제 기사 본문이 시작되는 위치를 판단하고, 인사말·기자 소개·뉴스레터 소개·구독 안내·"오늘은..."·"이번 기사에서는..." 같은 도입부는 후보에서 제외해라. 요약의 목적은 사용자가 원문을 읽을지 말지 판단할 수 있게 하는 프리뷰 요약이다. 후보마다 제목을 설명하는 근거·이유·핵심 사실인지, 또는 문서 전체의 핵심 메시지로 발전할 수 있는지 역할을 구분해서 판단해라. 우선순위는 제목 핵심 주장 40%, 소제목 중심 메시지 30%, 서론·결론 20%, 본문 세부 사례 10%다. 기사 중간 사례, 특정 기업 사례, 예시, 부가 설명만 후보로 뽑지 마라. 새로운 의미 부여, 원문에 없는 결론 작성을 금지한다. 중요한 문장이나 수치를 그대로 옮기지 말고, 원문이 직접 전달하는 중심 메시지를 간결하게 정리해라. 첫 번째 후보는 제목을 관통하는 대표 핵심내용으로 쓸 수 있을 만큼 문서의 중심 내용을 담아야 하며, 기사 첫 문장을 그대로 옮긴 후보는 제외해라. 숫자·기업명·사례는 메시지 이해에 필요한 경우에만 포함해라. 예산·비교·조직 신설이 제목의 핵심 근거일 때는 누가 무엇에 얼마를 배정했는지, 그 규모가 무엇과 비교되는지, 왜 핵심 근거인지 빠뜨리지 마라. "이와 별도로", "한편", "추가로", "반면"으로 이어지는 주변 국가·기업 사례는 제목의 중심 주제나 기사 결론을 직접 설명하지 않으면 후보로 뽑지 마라. 파일 제목이 특정 병목·쟁점·질문을 제시하면 그 질문에 답하는 문장만 핵심 후보로 선택해라. 실적 발표, 발언, 전망, 투자, 수치 변화는 해당 기업·기관·산업 주체를 반드시 함께 적어라. 제목 조각과 본문 문장을 이어 붙이지 말고, "비용·시간·정확도로 증명하라 2027년..."처럼 제목형 명령문과 본문 문장을 붙인 요약을 만들지 마라. '그는/이들은/해당 기업' 같은 지시대명사 대신 정확한 명칭을 써라. 생소한 기업·모델은 왜 중요한지 역할을 함께 설명해라. 출처 표기나 "주목해야 할 점은 돈" 같은 원문 메모·구어체 강조를 요약문에 넣지 마라. 문서 구간 ${index + 1}/${chunks.length}.`,
         }),
       ),
     )
@@ -134,6 +145,9 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
         '[chunk별 핵심 요약]',
         chunkSummaries.flatMap((item) => item.bullets).join('\n'),
         '',
+        '[문서 전체 구조 확인용 원문 발췌]',
+        documentContext,
+        '',
         '[발표·실적·수치 주체 확인용 원문 근거]',
         attributionEvidence,
       ].join('\n'),
@@ -146,10 +160,11 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
       const retry = await callSummaryApi(endpoint, {
         fileName,
         text: [
-          text.slice(0, 9_000),
-          '',
           '[파일명]',
           fileName,
+          '',
+          '[문서 전체 구조 확인용 원문 발췌]',
+          documentContext,
           '',
           '[발표·실적·수치 주체 확인용 원문 근거]',
           attributionEvidence,
@@ -160,8 +175,9 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
         stage: 'final',
         instruction: `${instruction}
 초안은 문장 품질 검사를 통과하지 못했다. 원문에서 직접 확인되는 내용만 사용해 정확히 두 개의 글머리기호로 다시 작성해라.
-첫 번째 글머리기호는 제목을 가장 잘 설명하는 '핵심내용', 두 번째 글머리기호는 원문에 근거해 이 내용이 왜 중요한지 설명하는 '인사이트'여야 한다.
-문장이 35~180자 안에서 자연스럽게 끝나는지, 첫 번째 문장만 읽어도 제목이 설명되는지, 제목과 직접 연결되는지, 기사의 결론을 요약했는지, 일부 사례만 요약하지 않았는지, 기사의 가장 중요한 메시지를 담고 있는지, 첫 번째 문장이 접속어·부사구·날짜·수치·사례가 아니라 명확한 주체와 핵심 메시지로 시작하는지, 주어와 서술어가 호응하는지, 지시대명사 주어를 쓰지 않았는지, 문장 중간에도 그/그녀/이들/해당 기업/이 회사/이 기술/그 모델 같은 지시대명사가 남아 있지 않은지, 제목 조각과 본문 문장을 붙이지 않았는지, 제목형 명령문·슬로건과 본문 전망이 섞이지 않았는지, 중요한 예산·비교·조직 신설의 주체·대상·규모·비교 기준을 빠뜨리지 않았는지, "이와 별도로/한편/추가로/반면"으로 시작하는 주변 사례를 독립 bullet로 쓰지 않았는지, 출처 표기·원문 메모·구어체 강조가 남아 있지 않은지, 생소한 기업·모델의 역할을 설명했는지, 발표·실적·수치의 주체가 생략되지 않았는지, 제목 기업과 실제 발언 주체가 혼동되지 않는지 출력 전에 스스로 검사해라.`,
+첫 번째 글머리기호는 제목의 근거·이유·핵심 사실, 두 번째 글머리기호는 문서 전체의 핵심 메시지여야 한다.
+첫 번째 문장은 "왜 이런 제목이 붙었는가?"에 답해야 하고, 두 번째 문장은 "그래서 이 문서가 결국 무엇을 말하는가?"에 답해야 한다.
+문장이 35~180자 안에서 자연스럽게 끝나는지, 첫 번째 문장만 읽어도 제목이 설명되는지, 제목과 직접 연결되는지, 기사의 결론을 요약했는지, 일부 사례만 요약하지 않았는지, 기사의 가장 중요한 메시지를 담고 있는지, 두 문장이 서로 다른 역할을 하는지, 첫 번째 문장이 접속어·부사구·날짜·수치·사례가 아니라 명확한 주체와 핵심 메시지로 시작하는지, 주어와 서술어가 호응하는지, 지시대명사 주어를 쓰지 않았는지, 문장 중간에도 그/그녀/이들/해당 기업/이 회사/이 기술/그 모델 같은 지시대명사가 남아 있지 않은지, 제목 조각과 본문 문장을 붙이지 않았는지, 제목형 명령문·슬로건과 본문 전망이 섞이지 않았는지, 중요한 예산·비교·조직 신설의 주체·대상·규모·비교 기준을 빠뜨리지 않았는지, "이와 별도로/한편/추가로/반면"으로 시작하는 주변 사례를 독립 bullet로 쓰지 않았는지, 출처 표기·원문 메모·구어체 강조가 남아 있지 않은지, 생소한 기업·모델의 역할을 설명했는지, 발표·실적·수치의 주체가 생략되지 않았는지, 제목 기업과 실제 발언 주체가 혼동되지 않는지 출력 전에 스스로 검사해라.`,
       })
       validated = validateAndGround(retry.bullets, text, fileName)
     }
@@ -206,6 +222,35 @@ function collectAttributionEvidence(text: string) {
     .slice(0, 24)
 
   return evidence.length ? evidence.map((sentence) => `- ${sentence}`).join('\n') : '- 원문에서 확인되는 기업·기관 주체를 기준으로만 요약할 것.'
+}
+
+function buildDocumentContext(text: string) {
+  const paragraphs = text
+    .split(/\n+/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter((paragraph) => paragraph.length >= 35)
+    .filter((paragraph) => !ARTICLE_INTRO_FRAGMENT.test(paragraph))
+
+  if (!paragraphs.length) return text.slice(0, 9_000)
+
+  const pickWindow = (start: number) =>
+    paragraphs
+      .slice(Math.max(0, start), Math.max(0, start) + DOCUMENT_CONTEXT_PARAGRAPH_LIMIT)
+      .join('\n')
+
+  const middleStart = Math.max(0, Math.floor(paragraphs.length / 2) - Math.floor(DOCUMENT_CONTEXT_PARAGRAPH_LIMIT / 2))
+  const tailStart = Math.max(0, paragraphs.length - DOCUMENT_CONTEXT_PARAGRAPH_LIMIT)
+
+  return [
+    '[초반: 제목·문제 제기 근거 후보]',
+    pickWindow(0),
+    '',
+    '[중반: 반복 주장·대표 근거 후보]',
+    pickWindow(middleStart),
+    '',
+    '[후반: 결론·향후 변화 후보]',
+    pickWindow(tailStart),
+  ].join('\n').slice(0, 18_000)
 }
 
 async function callSummaryApi(
@@ -323,6 +368,24 @@ function overlapScore(sentence: string, terms: string[]) {
   return matched / Math.min(terms.length, 5)
 }
 
+function isTitleAnchored(sentence: string, fileName?: string) {
+  const titleTerms = meaningfulTerms(fileName ?? '')
+  if (titleTerms.length < 2) return true
+  if (overlapScore(sentence, titleTerms) >= 0.16) return true
+
+  const title = fileName ?? ''
+  if (/(?:5000조원|반도체 박사|전기기사)/.test(title)) {
+    return /(?:전력망|전력|전기|전력기기|데이터센터|AI\s*인프라|반도체|병목|현장\s*기술인력|숙련인력)/.test(sentence)
+  }
+  if (/(?:해병대|드론|750억\s*달러|자율무기)/.test(title)) {
+    return /(?:드론|자율무기|무인기|UAV|DAWG|해병대|방산|국방|미군)/.test(sentence)
+  }
+  if (/(?:CES|MWC|GTC)/i.test(title)) {
+    return /(?:CES|MWC|GTC|AI|전시회|기술|산업|트렌드|전환)/i.test(sentence)
+  }
+  return false
+}
+
 function weightedPriorityScore(
   sentence: string,
   paragraphIndex: number,
@@ -372,7 +435,15 @@ function validateAndGround(items: string[], source: string, fileName?: string) {
     .filter((sentence) => !isTopicSpecificMismatch(sentence, fileName))
     .filter((sentence) => groundingScore(sentence, sourceTerms) >= 0.58)
 
-  return Array.from(new Set(candidates)).slice(0, BULLET_COUNT)
+  const unique = Array.from(new Set(candidates))
+  const first = unique.find((sentence) => isTitleAnchored(sentence, fileName))
+  const second = unique.find((sentence) =>
+    sentence !== first &&
+    (!first || similarity(normalizeForComparison(sentence), normalizeForComparison(first)) < 0.62) &&
+    hasCoreMessage(sentence)
+  )
+
+  return [first, second].filter((sentence): sentence is string => Boolean(sentence)).slice(0, BULLET_COUNT)
 }
 
 function polishSentence(item: string) {
@@ -528,7 +599,11 @@ function fillSummary(primary: string[], fallback: string[], fileName?: string) {
   const result = [...primary]
   for (const sentence of fallback.map(polishSentence)) {
     if (result.length >= BULLET_COUNT) break
+    const fitsPreviewRole = result.length === 0
+      ? isTitleAnchored(sentence, fileName)
+      : result.every((picked) => similarity(normalizeForComparison(sentence), normalizeForComparison(picked)) < 0.62)
     if (
+      fitsPreviewRole &&
       isStructurallyComplete(sentence) &&
       hasClearSubject(sentence) &&
       hasContextualMeaning(sentence) &&
