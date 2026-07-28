@@ -102,7 +102,7 @@ function rebuildSemanticText(lines: string[]) {
 
   for (const line of lines) {
     const isBullet = /^[-–—•]\s*/.test(line) || /^\d+[.)]\s+/.test(line)
-    const shortHeading = line.length < 60 && !/[.!?。]$/.test(line)
+    const shortHeading = isLikelyHeading(line)
     if (isBullet || shortHeading) flush()
 
     const joined = line
@@ -110,11 +110,19 @@ function rebuildSemanticText(lines: string[]) {
       .replace(/(\p{L})-\s+(?=\p{Ll})/gu, '$1')
     buffer += `${buffer ? ' ' : ''}${joined}`
 
-    if (/[.!?。][”"']?$/.test(line) || isBullet || buffer.length > 600) flush()
+    if (/[.!?。][”"']?$/.test(line) || isBullet || shortHeading || buffer.length > 600) flush()
   }
   flush()
 
   return paragraphs.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function isLikelyHeading(line: string) {
+  if (/[.!?。][”"']?$/.test(line)) return false
+  if (line.length < 60) return true
+  if (line.length <= 95 && /[:：]/.test(line)) return true
+  if (line.length <= 95 && /(?:전시하다|말하다|주목하다|이유|전망|시사점|문법|공식|전략|체크포인트)$/.test(line)) return true
+  return false
 }
 
 function trimToArticleBody(text: string) {
