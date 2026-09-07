@@ -4,6 +4,7 @@ const CHUNK_SIZE = 12_000
 const CHUNK_OVERLAP = 600
 const BULLET_COUNT = 2
 const DOCUMENT_CONTEXT_PARAGRAPH_LIMIT = 10
+const TITLE_RELEVANT_SENTENCE_LIMIT = 12
 const LEADING_CONNECTORS = /^(그리고|또한|결국|즉|하지만|다만|한편|따라서|그러나|특히|이에 따라|이와 함께)[,，]?\s*/
 const INVALID_FRAGMENT_START =
   /^(?:[-●•\s]*["'”’」)\],.，;:·…\-\–\—]+|[-●•\s]*(?:은|는|이|가|을|를|에|에서|에게|으로|로|와|과|의|도|만|부터|까지)\s|[-●•\s]*(?:있다|없다|했다|됐다|커졌다|중요해졌다|강조했다|밝혔다|전망했다)["'”’]?\s*(?:고|라고|며|면서|가운데|표현하며)|[-●•\s]*(?:때문에|덕분에|관해|관련해|중심으로|기반으로|통해|따르면|대해|위해|가운데)\s|[-●•\s]*[가-힣A-Za-z0-9%]+(?:하면서|되면서|하며|하고|했고|했으며|라는|라고|이라며|면서|는데|지만|거나|도록|기에)[,，]?\s)/
@@ -73,6 +74,7 @@ const FINAL_INSTRUCTION = `다음 PDF 내용은 TheMiilk에서 발행된 ICT/AI/
 요약 전에 반드시 본문이 실제로 시작되는 위치를 먼저 판단해라. 인사말, 기자 소개, 뉴스레터 소개, 구독 안내, "오늘은...", "이번 기사에서는..." 같은 도입부는 본문이 아니므로 요약 대상에서 제외해라.
 TheMiilk 기사 앞부분에는 기자 인사, 뉴스레터 소개, 연재 소개, 구독자 안내가 포함될 수 있다. 이 부분은 핵심내용이 아니므로 실제 기사 본문 이후의 내용만 분석해라.
 요약 페이지의 목적은 사용자가 원문을 읽을지 말지 빠르게 판단하도록 돕는 것이다. 따라서 파일 제목과 직접 연결되는 중심 이슈를 우선 요약하고, 제목과 무관한 주변 사례·부가 사례를 핵심 bullet로 올리지 마라.
+입력에 [제목 관련도 높은 원문 문장 후보]가 있으면 이 섹션을 먼저 검토해라. 단, 후보 문장을 그대로 베끼지 말고 제목을 설명하는 근거인지 확인한 뒤 완성된 요약문으로 다시 작성해라.
 요약 작성 전 내부적으로 다음 순서를 반드시 수행해라. STEP 1: 문서 제목과 부제를 파악한다. STEP 2: 제목의 주장·질문·표현·숫자·현상이 왜 등장했는지 본문 전체에서 근거를 찾는다. STEP 3: 본문 전체가 궁극적으로 전달하는 핵심 메시지를 파악한다. STEP 4: 서로 중복되지 않는 두 문장으로 작성한다.
 첫 번째 글머리기호는 '왜 이런 제목이 붙었는가?'에 답하는 문장이다. 제목과 직접 연결되는 가장 중요한 근거, 이유, 변화, 수치, 사실 또는 원인·결과 관계를 한 문장으로 작성해라.
 첫 번째 문장은 제목과 함께 읽었을 때 제목의 의미와 기사에서 다루는 문제가 즉시 이해되어야 한다. 제목과 관련 없는 흥미로운 숫자나 세부 사례를 첫 번째 문장으로 쓰지 마라.
@@ -143,6 +145,7 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
   try {
     const attributionEvidence = collectAttributionEvidence(text)
     const documentContext = buildDocumentContext(text)
+    const titleRelevantEvidence = collectTitleRelevantEvidence(text, fileName)
     const chunkSummaries = await Promise.all(
       chunks.map((chunk, index) =>
         callSummaryApi(endpoint, {
@@ -162,6 +165,9 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
         '',
         '[chunk별 핵심 요약]',
         chunkSummaries.flatMap((item) => item.bullets).join('\n'),
+        '',
+        '[제목 관련도 높은 원문 문장 후보]',
+        titleRelevantEvidence,
         '',
         '[문서 전체 구조 확인용 원문 발췌]',
         documentContext,
@@ -183,6 +189,9 @@ export async function summarizePdfText(text: string, fileName: string): Promise<
           '',
           '[문서 전체 구조 확인용 원문 발췌]',
           documentContext,
+          '',
+          '[제목 관련도 높은 원문 문장 후보]',
+          titleRelevantEvidence,
           '',
           '[발표·실적·수치 주체 확인용 원문 근거]',
           attributionEvidence,
@@ -251,6 +260,67 @@ function collectAttributionEvidence(text: string) {
     .slice(0, 24)
 
   return evidence.length ? evidence.map((sentence) => `- ${sentence}`).join('\n') : '- 원문에서 확인되는 기업·기관 주체를 기준으로만 요약할 것.'
+}
+
+function collectTitleRelevantEvidence(text: string, fileName: string) {
+  const titleTerms = meaningfulTerms(fileName)
+  const titleNumbers = fileName.match(/\d+(?:[.,]\d+)?/g) ?? []
+  const candidates = text
+    .split(/\n+/)
+    .flatMap((paragraph, paragraphIndex) =>
+      paragraph.split(/(?<=[.!?。])\s+/).map((sentence) => ({
+        paragraphIndex,
+        sentence: normalizeSourceSentence(sentence),
+      })),
+    )
+    .filter(({ sentence }) => sentence.length >= 25 && sentence.length <= 280)
+    .filter(({ sentence }) => !ARTICLE_INTRO_FRAGMENT.test(sentence))
+    .filter(({ sentence }) => !INVALID_FRAGMENT_START.test(sentence))
+    .filter(({ sentence }) => !INVALID_FRAGMENT_END.test(`${sentence.replace(/[.!?。]+$/, '')}.`))
+    .map(({ sentence, paragraphIndex }) => ({
+      sentence,
+      score: titleRelevanceScore(sentence, titleTerms, titleNumbers, paragraphIndex, fileName),
+    }))
+    .filter(({ score }) => score >= 2.2)
+    .sort((a, b) => b.score - a.score)
+    .filter((candidate, index, all) =>
+      all.slice(0, index).every((picked) => similarity(candidate.sentence, picked.sentence) < 0.5),
+    )
+    .slice(0, TITLE_RELEVANT_SENTENCE_LIMIT)
+
+  return candidates.length
+    ? candidates.map(({ sentence }) => `- ${sentence}`).join('\n')
+    : '- 제목과 직접 연결되는 원문 근거가 충분하지 않으면 문서 전체 발췌를 기준으로 판단할 것.'
+}
+
+function normalizeSourceSentence(sentence: string) {
+  return sentence
+    .replace(SUMMARY_LABEL_PREFIX, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s"'“”‘’([{「」\],.，;:·…\-–—]+/, '')
+    .trim()
+}
+
+function titleRelevanceScore(
+  sentence: string,
+  titleTerms: string[],
+  titleNumbers: string[],
+  paragraphIndex: number,
+  fileName: string,
+) {
+  if (!titleTerms.length) return 0
+  const normalizedSentence = sentence.toLowerCase()
+  const sentenceTerms = new Set(tokenize(sentence))
+  const matchedTerms = titleTerms.filter((term) =>
+    sentenceTerms.has(term) || normalizedSentence.includes(term),
+  )
+  const matchedNumbers = titleNumbers.filter((number) => sentence.includes(number))
+  const earlyWeight = paragraphIndex <= 6 ? 1.2 : 0
+  const titleAnchorWeight = isTitleAnchored(sentence, fileName) ? 1.5 : 0
+  const messageWeight = CORE_MESSAGE_CUE.test(sentence) || MEANING_CUE.test(sentence) ? 1 : 0
+  const numberWeight = matchedNumbers.length ? 1.2 : 0
+
+  return matchedTerms.length * 2.4 + numberWeight + titleAnchorWeight + messageWeight + earlyWeight
 }
 
 function buildDocumentContext(text: string) {
