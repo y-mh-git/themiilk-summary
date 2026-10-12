@@ -6,9 +6,10 @@ type SummaryCardProps = {
   isEditing: boolean
   drafts: string[]
   onDraftChange: (bulletIndex: number, value: string) => void
+  onDownloadPdf: () => void
 }
 
-export function SummaryCard({ summary, isEditing, drafts, onDraftChange }: SummaryCardProps) {
+export function SummaryCard({ summary, isEditing, drafts, onDraftChange, onDownloadPdf }: SummaryCardProps) {
   const displayName = getDisplayFileName(summary.fileName)
   const compactTitle = displayName.length > 72
 
@@ -16,10 +17,17 @@ export function SummaryCard({ summary, isEditing, drafts, onDraftChange }: Summa
     <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
       <div className="mb-2 min-w-0">
         <h3
-          title={displayName}
           className={`block w-full truncate whitespace-nowrap font-sans font-bold tracking-[-0.01em] text-slate-900 ${compactTitle ? 'text-[13px] leading-5' : 'text-[15px] leading-5'}`}
         >
-          {displayName}
+          <button
+            type="button"
+            onClick={onDownloadPdf}
+            title={`${displayName} — 원본 PDF 다운로드`}
+            aria-label={`${displayName} 원본 PDF 다운로드`}
+            className="block w-full cursor-pointer truncate text-left [font:inherit] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-600"
+          >
+            {displayName}
+          </button>
         </h3>
       </div>
       <div className="border-t border-slate-100 pt-2">

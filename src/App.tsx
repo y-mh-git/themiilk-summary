@@ -181,6 +181,34 @@ export default function App() {
     }
   }
 
+  const handleDownloadPdf = (fileIndex: number) => {
+    const file = files[fileIndex]
+    if (!file) {
+      setShareStatus({ type: 'error', message: '원본 PDF 파일을 찾을 수 없습니다. 파일을 다시 업로드해 주세요.' })
+      return
+    }
+
+    let objectUrl: string | undefined
+    const link = document.createElement('a')
+    try {
+      objectUrl = URL.createObjectURL(file)
+      link.href = objectUrl
+      link.download = file.name
+      document.body.appendChild(link)
+      link.click()
+      setShareStatus({ type: 'success', message: '원본 PDF 다운로드를 시작했습니다.' })
+    } catch (caught) {
+      console.error('원본 PDF 다운로드 실패:', caught)
+      setShareStatus({ type: 'error', message: '원본 PDF를 다운로드하지 못했습니다. 다시 시도해 주세요.' })
+    } finally {
+      link.remove()
+      if (objectUrl) {
+        const urlToRevoke = objectUrl
+        window.setTimeout(() => URL.revokeObjectURL(urlToRevoke), 30_000)
+      }
+    }
+  }
+
   const handleSaveAll = async () => {
     const sourceNode = summaryPageRef.current
     if (!sourceNode) {
@@ -401,13 +429,14 @@ export default function App() {
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-1.5">
-                    {(isEditingAll ? draftSummaries : summaries).map((summary) => (
+                    {(isEditingAll ? draftSummaries : summaries).map((summary, fileIndex) => (
                       <SummaryCard
                         key={summary.fileName}
                         summary={summary}
                         isEditing={isEditingAll}
                         drafts={summary.bullets}
                         onDraftChange={(bulletIndex, value) => updateDraft(summary.fileName, bulletIndex, value)}
+                        onDownloadPdf={() => handleDownloadPdf(fileIndex)}
                       />
                     ))}
                   </div>
