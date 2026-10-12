@@ -7,6 +7,7 @@ import { SelectedFileList } from './components/SelectedFileList'
 import { SelectionResults } from './components/SelectionResults'
 import { SummaryCard } from './components/SummaryCard'
 import { getDisplayFileName } from './lib/filename'
+import { createShareHtml } from './lib/shareHtml'
 import { cleanPdfText, extractPdfText } from './lib/pdf'
 import { evaluateMaterialSelections } from './services/materialSelector'
 import { summarizePdfText } from './services/summarizer'
@@ -42,6 +43,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [shareStatus, setShareStatus] = useState<ShareStatus>(null)
   const [isSavingImage, setIsSavingImage] = useState(false)
+  const [isSavingHtml, setIsSavingHtml] = useState(false)
   const [isEditingAll, setIsEditingAll] = useState(false)
   const [draftSummaries, setDraftSummaries] = useState<PdfSummary[]>([])
   const isProcessing = status === 'extracting' || status === 'summarizing'
@@ -206,6 +208,32 @@ export default function App() {
         const urlToRevoke = objectUrl
         window.setTimeout(() => URL.revokeObjectURL(urlToRevoke), 30_000)
       }
+    }
+  }
+
+  const handleSaveHtml = async () => {
+    setIsSavingHtml(true)
+    setShareStatus(null)
+    let objectUrl: string | undefined
+    const link = document.createElement('a')
+    try {
+      const html = await createShareHtml(summaries, files)
+      objectUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+      link.href = objectUrl
+      link.download = `the-miilk-pdf-summary-${new Date().toISOString().slice(0, 10)}.html`
+      document.body.appendChild(link)
+      link.click()
+      setShareStatus({ type: 'success', message: '원본 PDF가 포함된 공유용 HTML 다운로드를 시작했습니다.' })
+    } catch (caught) {
+      console.error('공유용 HTML 저장 실패:', caught)
+      setShareStatus({ type: 'error', message: caught instanceof Error ? caught.message : '공유용 HTML을 저장하지 못했습니다. 다시 시도해 주세요.' })
+    } finally {
+      link.remove()
+      if (objectUrl) {
+        const urlToRevoke = objectUrl
+        window.setTimeout(() => URL.revokeObjectURL(urlToRevoke), 30_000)
+      }
+      setIsSavingHtml(false)
     }
   }
 
@@ -400,6 +428,10 @@ export default function App() {
                     <button type="button" disabled={!summaries.length || isSavingImage} onClick={handleSaveAll} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-bold text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40">
                       {isSavingImage ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                       {isSavingImage ? '저장 중' : '전체 이미지 저장'}
+                    </button>
+                    <button type="button" disabled={!summaries.length || isSavingHtml || isProcessing} onClick={handleSaveHtml} title="요약과 원본 PDF를 함께 저장합니다. 저장한 HTML에서 제목을 누르면 PDF가 다운로드됩니다." className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
+                      {isSavingHtml ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                      {isSavingHtml ? 'HTML 저장 중' : '공유용 HTML 저장'}
                     </button>
                     <button type="button" disabled={!summaries.length} onClick={startEditingAll} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
                       <Pencil className="size-3.5" />수정
